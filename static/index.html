@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Ajuste de Curva</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+<h2>Ajuste de Curva (Mínimos Quadrados)</h2>
+
+<script>
+// dados (os mesmos da sua tabela)
+let dados = {
+  x: [-2, -1.5, 0, 1, 2.2, 3.1],
+  y: [-30.5, -20.2, -3.3, 8.9, 16.8, 21.4]
+};
+
+// chama o Flask
+fetch("/ajuste", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(dados)
+})
+.then(res => res.json())
+.then(data => iniciarCena(data));
+
+function iniciarCena(data) {
+
+  // cena
+  const scene = new THREE.Scene();
+
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+  camera.position.z = 10;
+
+  const renderer = new THREE.WebGLRenderer();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  // 🔴 pontos experimentais
+  data.pontos.forEach(p => {
+    const geometry = new THREE.SphereGeometry(0.1);
+    const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    const point = new THREE.Mesh(geometry, material);
+    point.position.set(p[0], p[1], 0);
+    scene.add(point);
+  });
+
+  // 🔵 curva ajustada
+  const pontosCurva = data.curva.map(p => new THREE.Vector3(p[0], p[1], 0));
+  const geometry = new THREE.BufferGeometry().setFromPoints(pontosCurva);
+  const material = new THREE.LineBasicMaterial({ color: 0x0000ff });
+  const curva = new THREE.Line(geometry, material);
+
+  scene.add(curva);
+
+  // animação simples
+  function animate() {
+    requestAnimationFrame(animate);
+    curva.rotation.z += 0.001;
+    renderer.render(scene, camera);
+  }
+
+  animate();
+}
+</script>
+</body>
+</html>
