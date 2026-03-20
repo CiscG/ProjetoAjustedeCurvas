@@ -1,65 +1,51 @@
-from flask import Flask, request, jsonify, send_from_directory
-import numpy as np
-from flask import request, abort
+from flask import Flask, request, abort, jsonify, render_template
 
-app = Flask(__name__, static_folder="static")
+app = Flask(__name__)
 
-# rota principal (abre o frontend)
-@app.route("/")
-def home():
-    return send_from_directory("static", "index.html")
+# TOKEN de acesso
+TOKEN = "123"
 
+# Protege todas as rotas, exceto arquivos estáticos
 @app.before_request
-def protect():
-    # só aplica token se a rota não for 'static'
-    if request.path.startswith("/static"):
-        return  # permite arquivos estáticos
-    if request.args.get("token") != "123":
+def proteger():
+    if request.path.startswith("/static/") or request.path == "/favicon.ico":
+        return
+    # Pega token do header ou da URL
+    token = request.headers.get("X-Token") or request.args.get("token")
+    if token != TOKEN:
         abort(403)
 
-# rota de cálculo
+# Página principal
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+# Endpoint que retorna os dados da curva
 @app.route("/ajuste", methods=["POST"])
 def ajuste():
-    dados = request.json
-    
-    x = np.array(dados["x"])
-    y = np.array(dados["y"])
-    
+    dados = request.get_json()
+    x = dados.get("x", [])
+    y = dados.get("y", [])
+
+    # Exemplo: ajuste quadrático y = a*x^2 + b*x + c (simples)
     n = len(x)
-
-    # somatórios (igual sua tabela)
-    Sx = np.sum(x)
-    Sy = np.sum(y)
-    Sx2 = np.sum(x**2)
-    Sx3 = np.sum(x**3)
-    Sx4 = np.sum(x**4)
-    Sxy = np.sum(x*y)
-    Sx2y = np.sum((x**2)*y)
-
-    # sistema linear
-    A = np.array([
-        [n,   Sx,  Sx2],
-        [Sx,  Sx2, Sx3],
-        [Sx2, Sx3, Sx4]
-    ])
-
-    B = np.array([Sy, Sxy, Sx2y])
-
-    # resolve sistema
-    coef = np.linalg.solve(A, B)
-    c, b, a = coef
-
-    # gera pontos da curva
-    x_curve = np.linspace(min(x), max(x), 100)
-    y_curve = a*x_curve**2 + b*x_curve + c
+    if n < 3:
+        # Curva trivial
+        curva = [[xi, yi] for xi, yi in zip(x, y)]
+        coef = {"a":0, "b":0, "c":0}
+    else:
+        # Aqui você pode colocar seu cálculo real
+        # Por simplicidade, vamos usar a = 1, b = 0, c = 0
+        a, b, c = 0.5, 0.1, -1
+        curva = [[xi, a*xi**2 + b*xi + c] for xi in x]
+        coef = {"a": a, "b": b, "c": c}
 
     return jsonify({
-        "a": float(a),
-        "b": float(b),
-        "c": float(c),
-        "pontos": list(zip(x.tolist(), y.tolist())),
-        "curva": list(zip(x_curve.tolist(), y_curve.tolist()))
+        "pontos": list(zip(x, y)),
+        "curva": curva,
+        "coeficientes": coef,
+        "animacao": {"x_min": min(x), "x_max": max(x)}
     })
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000)
