@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, send_from_directory
 import numpy as np
+from flask import request, abort
 
 app = Flask(__name__, static_folder="static")
 
@@ -7,6 +8,14 @@ app = Flask(__name__, static_folder="static")
 @app.route("/")
 def home():
     return send_from_directory("static", "index.html")
+
+@app.before_request
+def protect():
+    # só aplica token se a rota não for 'static'
+    if request.path.startswith("/static"):
+        return  # permite arquivos estáticos
+    if request.args.get("token") != "123":
+        abort(403)
 
 # rota de cálculo
 @app.route("/ajuste", methods=["POST"])

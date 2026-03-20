@@ -1,21 +1,4 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Ajuste de Curva</title>
-
-  <!-- Three.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-</head>
-
-<body style="margin:0; background:black; color:white;">
-
-<h2 style="position:absolute; top:10px; left:10px;">
-  Ajuste de Curva com Animação
-</h2>
-
-<!-- Seu script separado -->
-<script>
-   // ------------------ DADOS ------------------
+// ------------------ DADOS ------------------
 let dados = {
   x: [-2, -1.5, 0, 1, 2.2, 3.1],
   y: [-30.5, -20.2, -3.3, 8.9, 16.8, 21.4]
@@ -124,7 +107,3 @@ function iniciarCena(data) {
 
   animate();
 }
-</script>
-
-</body>
-</html>
