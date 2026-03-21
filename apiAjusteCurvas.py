@@ -1,5 +1,6 @@
 import os
 import json
+import numpy as np
 from flask import Flask, render_template, jsonify, abort, request
 
 app = Flask(__name__)
