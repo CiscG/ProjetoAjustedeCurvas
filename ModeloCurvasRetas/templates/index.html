@@ -4,88 +4,139 @@
   <title>Ajuste de Curva</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
+
 <body style="margin:0; background:black; color:white;">
-<h2 style="position:absolute; top:10px; left:10px;">Ajuste de Curva com Animação</h2>
+<h2 style="position:absolute; top:10px; left:10px;">
+  Pontos ligados (sem suavização)
+</h2>
 
 <script>
-  const TOKEN = "123"; // seu token
 
-  // ------------------ DADOS ------------------
-  let dados = {
-    x: [-2, -1.5, 0, 1, 2.2, 3.1],
-    y: [-30.5, -20.2, -3.3, 8.9, 16.8, 21.4]
-  };
+const arquivo_json = "{{ arquivo_json }}";
 
-  // ------------------ REQUISIÇÃO ------------------
-  fetch("/ajuste?token=" + TOKEN, {  // token na URL
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(dados)
-  })
+// ------------------ REQUISIÇÃO ------------------
+fetch(arquivo_json)
   .then(res => res.json())
   .then(data => iniciarCena(data))
-  .catch(err => console.error("Erro ao carregar dados:", err));
+  .catch(err => console.error("Erro:", err));
 
-  // ------------------ FUNÇÃO PRINCIPAL ------------------
-  function iniciarCena(data) {
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-    camera.position.z = 20;
 
-    const renderer = new THREE.WebGLRenderer();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
+// ------------------ FUNÇÃO PRINCIPAL ------------------
+function iniciarCena(data) {
 
-    const materialEixo = new THREE.LineBasicMaterial({ color: 0xffffff });
-    const eixoX = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(-10,0,0), new THREE.Vector3(10,0,0)
-    ]);
-    const eixoY = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(0,-40,0), new THREE.Vector3(0,40,0)
-    ]);
-    scene.add(new THREE.Line(eixoX, materialEixo));
-    scene.add(new THREE.Line(eixoY, materialEixo));
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
 
-    // Pontos experimentais
-    data.pontos.forEach(p => {
-      const geo = new THREE.SphereGeometry(0.2);
-      const mat = new THREE.MeshBasicMaterial({ color:0xff0000 });
-      const ponto = new THREE.Mesh(geo, mat);
-      ponto.position.set(p[0], p[1], 0);
-      scene.add(ponto);
-    });
+  const camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  );
 
-    // Curva
-    const pontosCurva = data.curva.map(p => new THREE.Vector3(p[0], p[1], 0));
-    const geoCurva = new THREE.BufferGeometry().setFromPoints(pontosCurva);
-    const matCurva = new THREE.LineBasicMaterial({ color:0x0000ff });
-    scene.add(new THREE.Line(geoCurva, matCurva));
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
 
-    // Ponto animado
-    const geoAnim = new THREE.SphereGeometry(0.3);
-    const matAnim = new THREE.MeshBasicMaterial({ color:0xffff00 });
-    const pontoAnimado = new THREE.Mesh(geoAnim, matAnim);
-    scene.add(pontoAnimado);
+  const x_vals = data.x;
+  const y_vals = data.y;
 
-    const a = data.coeficientes.a;
-    const b = data.coeficientes.b;
-    const c = data.coeficientes.c;
-    let t = data.animacao.x_min;
-    const tMax = data.animacao.x_max;
+  const x_min = Math.min(...x_vals);
+  const x_max = Math.max(...x_vals);
+  const y_min = Math.min(...y_vals);
+  const y_max = Math.max(...y_vals);
 
-    function animate() {
-      requestAnimationFrame(animate);
-      t += 0.03;
-      if (t > tMax) t = data.animacao.x_min;
-      let y = a*t*t + b*t + c;
-      pontoAnimado.position.set(t,y,0);
-      renderer.render(scene,camera);
+  const escala = Math.max(x_max - x_min, y_max - y_min);
+  camera.position.z = escala * 2;
+
+  // ---------- EIXOS ----------
+  const materialEixo = new THREE.LineBasicMaterial({ color: 0xffffff });
+
+  const eixoX = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(x_min - 1, 0, 0),
+    new THREE.Vector3(x_max + 1, 0, 0)
+  ]);
+
+  const eixoY = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, y_min - 5, 0),
+    new THREE.Vector3(0, y_max + 5, 0)
+  ]);
+
+  scene.add(new THREE.Line(eixoX, materialEixo));
+  scene.add(new THREE.Line(eixoY, materialEixo));
+
+  // ---------- PONTOS ----------
+  x_vals.forEach((xi, idx) => {
+    const yi = y_vals[idx];
+
+    const geo = new THREE.SphereGeometry(0.4, 16, 16);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+
+    const ponto = new THREE.Mesh(geo, mat);
+    ponto.position.set(xi, yi, 0);
+
+    scene.add(ponto);
+  });
+
+  // ---------- LINHA LIGANDO OS PONTOS ----------
+  const pontosOrdenados = x_vals
+    .map((x, i) => ({ x: x, y: y_vals[i] }))
+    .sort((a, b) => a.x - b.x);
+
+  const pontosLinha = pontosOrdenados.map(p =>
+    new THREE.Vector3(p.x, p.y, 0)
+  );
+
+  const geoLinha = new THREE.BufferGeometry().setFromPoints(pontosLinha);
+  const matLinha = new THREE.LineBasicMaterial({ color: 0x00ffff });
+
+  scene.add(new THREE.Line(geoLinha, matLinha));
+
+  // ---------- PONTO ANIMADO ----------
+  const geoAnim = new THREE.SphereGeometry(0.5, 16, 16);
+  const matAnim = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+
+  const pontoAnimado = new THREE.Mesh(geoAnim, matAnim);
+  scene.add(pontoAnimado);
+
+  let t = x_min;
+  const tMax = x_max;
+
+  function animate() {
+    requestAnimationFrame(animate);
+
+    t += (x_max - x_min) / 200;
+    if (t > tMax) t = x_min;
+
+    // interpolação simples entre pontos
+    let y = 0;
+
+    for (let i = 0; i < pontosOrdenados.length - 1; i++) {
+      let p1 = pontosOrdenados[i];
+      let p2 = pontosOrdenados[i + 1];
+
+      if (t >= p1.x && t <= p2.x) {
+        let proporcao = (t - p1.x) / (p2.x - p1.x);
+        y = p1.y + proporcao * (p2.y - p1.y);
+        break;
+      }
     }
-    animate();
+
+    pontoAnimado.position.set(t, y, 0);
+
+    renderer.render(scene, camera);
   }
+
+  animate();
+
+  // ---------- RESPONSIVO ----------
+  window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+}
+
 </script>
-<script>src="https://cdn.jsdelivr.net/npm/eruda"</script>
-<script>eruda.init();
-console.log("Eruda carregado");</script>
 </body>
 </html>
