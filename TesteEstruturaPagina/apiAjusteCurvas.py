@@ -12,6 +12,11 @@ DATA_FOLDER = os.path.join(os.path.dirname(__file__), "data")
 def index():
     return render_template("index.html", arquivo_json=None)
 
+@app.route("/lista_json")
+def lista_json():
+    arquivos = [f.replace(".json","") for f in os.listdir(DATA_FOLDER) if f.endswith(".json")]
+    return jsonify(arquivos)
+
 @app.route("/plot/<nome_json>")
 def plot(nome_json):
     return render_template(

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Ajuste de Curvas</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/controls/OrbitControls.js"></script>
+
+<style>
+body { margin:0; background:#0f172a; color:white; font-family:Arial; }
+.topbar { padding:10px; background:#1e293b; display:flex; gap:10px; }
+button { padding:6px 10px; border:none; cursor:pointer; background:#38bdf8; }
+#drop { margin:10px; padding:15px; border:2px dashed #555; text-align:center; }
+#grafico { height:75vh; }
+#info { padding:10px; }
+</style>
+</head>
+
+<body>
+
+<div class="topbar">
+  <button onclick="carregarLista()">📂 JSONs</button>
+  <button onclick="exportar()">🖼️ Exportar</button>
+</div>
+
+<div id="drop">Arraste JSON aqui</div>
+<div id="info"></div>
+<div id="grafico"></div>
+
+<script>
+const token = "123";
+let rendererGlobal;
+
+// ---------------- DRAG ----------------
+drop.addEventListener("dragover", e => e.preventDefault());
+
+drop.addEventListener("drop", e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  const reader = new FileReader();
+
+  reader.onload = e => {
+    enviar(JSON.parse(e.target.result));
+  };
+
+  reader.readAsText(file);
+});
+
+// ---------------- LISTA JSON ----------------
+function carregarLista() {
+  fetch(`/lista_json?token=${token}`)
+    .then(res => res.json())
+    .then(lista => {
+      const escolha = prompt("Escolha:\n" + lista.join("\n"));
+      if (escolha) {
+        fetch(`/data/${escolha}.json?token=${token}`)
+          .then(res => res.json())
+          .then(data => desenhar(data));
+      }
+    });
+}
+
+// ---------------- BACKEND ----------------
+function enviar(json) {
+  fetch(`/data_temp?token=${token}`, {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(json)
+  })
+  .then(res => res.json())
+  .then(data => desenhar(data));
+}
+
+// ---------------- DESENHO ----------------
+function desenhar(data) {
+
+  document.getElementById("grafico").innerHTML = "";
+
+  const scene = new THREE.Scene();
+
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+
+  const renderer = new THREE.WebGLRenderer({preserveDrawingBuffer:true});
+  renderer.setSize(window.innerWidth, window.innerHeight*0.75);
+  document.getElementById("grafico").appendChild(renderer.domElement);
+
+  rendererGlobal = renderer;
+
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableRotate = false;
+
+  const x = data.x;
+  const y = data.y;
+
+  const x_min = Math.min(...x);
+  const x_max = Math.max(...x);
+  const y_min = Math.min(...y);
+  const y_max = Math.max(...y);
+
+  camera.position.z = (x_max - x_min) * 2;
+
+  // -------- GRID --------
+  const grid = new THREE.GridHelper(50, 50);
+  scene.add(grid);
+
+  // -------- EIXOS --------
+  const eixoMaterial = new THREE.LineBasicMaterial({color:0xffffff});
+
+  const eixoX = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(x_min,0,0),
+    new THREE.Vector3(x_max,0,0)
+  ]);
+
+  const eixoY = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0,y_min,0),
+    new THREE.Vector3(0,y_max,0)
+  ]);
+
+  scene.add(new THREE.Line(eixoX,eixoMaterial));
+  scene.add(new THREE.Line(eixoY,eixoMaterial));
+
+  // -------- PONTOS --------
+  x.forEach((xi,i)=>{
+    const p = new THREE.Mesh(
+      new THREE.SphereGeometry(0.3),
+      new THREE.MeshBasicMaterial({color:0xff0000})
+    );
+    p.position.set(xi,y[i],0);
+    scene.add(p);
+  });
+
+  // -------- CURVA --------
+  const a = data.coeficientes.a;
+  const b = data.coeficientes.b;
+  const c = data.coeficientes.c;
+
+  let pontos = [];
+  for(let i=0;i<200;i++){
+    let xi = x_min + (i/200)*(x_max-x_min);
+    let yi = a*xi*xi + b*xi + c;
+    pontos.push(new THREE.Vector3(xi,yi,0));
+  }
+
+  scene.add(new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(pontos),
+    new THREE.LineBasicMaterial({color:0x00ff00})
+  ));
+
+  // -------- R² --------
+  let yMed = y.reduce((a,b)=>a+b)/y.length;
+  let ssTot = y.reduce((s,v)=>s+(v-yMed)**2,0);
+  let ssRes = x.reduce((s,xi,i)=>{
+    let yi = a*xi*xi + b*xi + c;
+    return s + (y[i]-yi)**2;
+  },0);
+
+  let r2 = 1 - (ssRes/ssTot);
+
+  document.getElementById("info").innerHTML =
+    `Equação: y=${a.toFixed(2)}x² + ${b.toFixed(2)}x + ${c.toFixed(2)}<br>
+     R²: ${r2.toFixed(4)}`;
+
+  function animate(){
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene,camera);
+  }
+
+  animate();
+}
+
+// ---------------- EXPORTAR ----------------
+function exportar() {
+  const link = document.createElement('a');
+  link.download = "grafico.png";
+  link.href = rendererGlobal.domElement.toDataURL();
+  link.click();
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+  <html>
+  <head>
+    <title>Ajuste de Curva</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  </head>
+  <body style="margin:0; background:black; color:white;">
+  <h2 style="position:absolute; top:10px; left:10px;">Ajuste de Curva com Animação</h2>
+
+  <script>
+// URL do JSON vinda do Flask
+const arquivo_json = "{{ arquivo_json }}";
+
+// ------------------ REQUISIÇÃO ------------------
+fetch(arquivo_json)
+  .then(res => res.json())
+  .then(data => iniciarCena(data))
+  .catch(err => console.error("Erro ao carregar dados:", err));
+
+
+// ------------------ FUNÇÃO PRINCIPAL ------------------
+function iniciarCena(data) {
+
+  // ---------- CENA ----------
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+
+  const camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  );
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+
+  // ---------- DADOS ----------
+  const x_vals = data.x;
+  const y_vals = data.y;
+
+  const x_min = Math.min(...x_vals);
+  const x_max = Math.max(...x_vals);
+  const y_min = Math.min(...y_vals);
+  const y_max = Math.max(...y_vals);
+
+  // Ajuste da câmera
+  const escala = Math.max(x_max - x_min, y_max - y_min);
+  camera.position.z = escala * 2;
+
+
+  // ---------- EIXOS ----------
+  const materialEixo = new THREE.LineBasicMaterial({ color: 0xffffff });
+
+  const eixoX = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(x_min - 1, 0, 0),
+    new THREE.Vector3(x_max + 1, 0, 0)
+  ]);
+
+  const eixoY = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, y_min - 5, 0),
+    new THREE.Vector3(0, y_max + 5, 0)
+  ]);
+
+  scene.add(new THREE.Line(eixoX, materialEixo));
+  scene.add(new THREE.Line(eixoY, materialEixo));
+
+
+  // ---------- PONTOS EXPERIMENTAIS ----------
+  x_vals.forEach((xi, idx) => {
+    const yi = y_vals[idx];
+
+    const geo = new THREE.SphereGeometry(0.4, 16, 16);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+
+    const ponto = new THREE.Mesh(geo, mat);
+    ponto.position.set(xi, yi, 0);
+
+    scene.add(ponto);
+  });
+
+
+  // ---------- CURVA SUAVE ----------
+  const a = data.coeficientes.a;
+  const b = data.coeficientes.b;
+  const c = data.coeficientes.c;
+
+  const pontosCurva = [];
+  const numPontos = 200;
+
+  for (let i = 0; i <= numPontos; i++) {
+    const xi = x_min + (i / numPontos) * (x_max - x_min);
+    const yi = a * xi * xi + b * xi + c;
+
+    pontosCurva.push(new THREE.Vector3(xi, yi, 0));
+  }
+
+  const geoCurva = new THREE.BufferGeometry().setFromPoints(pontosCurva);
+  const matCurva = new THREE.LineBasicMaterial({ color: 0x0000ff });
+
+  scene.add(new THREE.Line(geoCurva, matCurva));
+
+
+  // ---------- PONTO ANIMADO ----------
+  const geoAnim = new THREE.SphereGeometry(0.5, 16, 16);
+  const matAnim = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+
+  const pontoAnimado = new THREE.Mesh(geoAnim, matAnim);
+  scene.add(pontoAnimado);
+
+  let t = x_min;
+  const tMax = x_max;
+
+  function animate() {
+    requestAnimationFrame(animate);
+
+    t += (x_max - x_min) / 200;
+
+    if (t > tMax) {
+      t = x_min;
+    }
+
+    const y = a * t * t + b * t + c;
+    pontoAnimado.position.set(t, y, 0);
+
+    renderer.render(scene, camera);
+  }
+
+  animate();
+
+
+  // ---------- RESPONSIVO ----------
+  window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+}
+</script>
+
+  </body>
+  </html>

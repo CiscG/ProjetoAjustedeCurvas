@@ -19,6 +19,29 @@ def plot(nome_json):
         arquivo_json=f"/data/{nome_json}.json?token={TOKEN}"
     )
 
+@app.route("/lista_json")
+def lista_json():
+    if not os.path.exists(DATA_FOLDER):
+        return jsonify([])
+
+    arquivos = [
+        f.replace(".json", "")
+        for f in os.listdir(DATA_FOLDER)
+        if f.endswith(".json")
+    ]
+
+    return jsonify(arquivos)
+
+#@app.before_request
+#def proteger():
+#    if request.path.startswith("/static") or request.path in ["/lista_json"]:
+#        return
+#
+#    token = request.args.get("token")
+#    if token != TOKEN:
+#        abort(403)
+
+
 @app.route("/data/<nome_json>.json")
 def get_json(nome_json):
     caminho = os.path.join(DATA_FOLDER, f"{nome_json}.json")
