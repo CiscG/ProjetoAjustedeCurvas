@@ -1,243 +1,241 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Ajuste de Curvas</title>
+<title>Análise de Desempenho Computacional</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/controls/OrbitControls.js"></script>
 
 <style>
-:root {
-  --bg: #0f172a;
-  --card: #1e293b;
-  --accent: #38bdf8;
-  --accent2: #22c55e;
-  --text: #e2e8f0;
-  --muted: #94a3b8;
-}
-
-body {
-  margin: 0;
-  font-family: "Segoe UI", Arial, sans-serif;
-  background: linear-gradient(135deg, #0f172a, #020617);
-  color: var(--text);
-}
-
-/* -------- TOPBAR -------- */
-.topbar {
-  padding: 15px 20px;
-  background: rgba(30, 41, 59, 0.9);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid #334155;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.topbar h2 {
-  margin: 0;
-  font-size: 20px;
-  color: var(--accent);
-}
-
-/* -------- CONTAINER -------- */
-.container {
-  padding: 15px;
-}
-
-/* -------- DRAG AREA -------- */
-#drop {
-  border: 2px dashed #475569;
-  border-radius: 12px;
-  padding: 25px;
-  text-align: center;
-  color: var(--muted);
-  transition: all 0.3s ease;
-  margin-bottom: 15px;
-  background: rgba(30, 41, 59, 0.4);
-}
-
-#drop:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: rgba(56, 189, 248, 0.1);
-  transform: scale(1.01);
-}
-
-/* -------- INFO -------- */
-#info {
-  background: var(--card);
-  padding: 15px;
-  border-radius: 10px;
-  margin-bottom: 10px;
-  box-shadow: 0 0 15px rgba(0,0,0,0.3);
-}
-
-#info b {
-  color: var(--accent2);
-}
-
-/* -------- GRÁFICO -------- */
-#grafico {
-  height: 75vh;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 0 25px rgba(0,0,0,0.5);
-  background: #020617;
-}
-
-/* -------- RESPONSIVO -------- */
-@media (max-width: 768px) {
-  .topbar h2 {
-    font-size: 16px;
-  }
-
-  #grafico {
-    height: 65vh;
-  }
-}
+body { margin:0; font-family:Arial; background:#0f172a; color:white; display:flex; height: 100vh; overflow: hidden; }
+.sidebar { width:260px; background:#1e293b; padding:15px; border-right:1px solid #334155; display: flex; flex-direction: column; }
+.sidebar h3 { margin-top:0; color: #38bdf8; }
+.mode-selector { margin-bottom: 20px; padding: 10px; background: #0f172a; border-radius: 8px; }
+.json-item { padding:10px; margin:5px 0; background:#334155; cursor:pointer; border-radius:5px; transition: 0.3s; }
+.json-item:hover { background:#38bdf8; color: #0f172a; }
+.main { flex:1; display:flex; flex-direction:column; overflow-y: auto; }
+.topbar { padding:10px; background:#1e293b; display:flex; justify-content:space-between; align-items: center; border-bottom: 1px solid #334155; }
+#info { padding:15px; background:#020617; border-bottom: 1px solid #334155; line-height: 1.6; }
+#grafico { height:60vh; background: #000; position: relative; }
+#tabela { padding: 10px; overflow:auto; background: #0f172a; }
+table { width:100%; border-collapse:collapse; font-size: 13px; }
+th, td { border:1px solid #334155; padding:8px; text-align:center; }
+th { background: #1e293b; }
+.btn-export { background: #0ea5e9; border: none; color: white; padding: 8px 15px; border-radius: 4px; cursor: pointer; }
 </style>
 </head>
 
 <body>
 
-<div class="topbar">
-  <h2>Ajuste de Curvas - Análise de Notas</h2>
+<div class="sidebar">
+  <h3>📂 Painel de Controle</h3>
+  
+  <div class="mode-selector">
+    <label style="font-size: 12px; color: #94a3b8;">MODO DE VISUALIZAÇÃO:</label><br>
+    <select id="modoAjuste" style="width: 100%; margin-top: 5px; padding: 5px; background: #334155; color: white; border: none;" onchange="recarregarAtual()">
+      <option value="padrao">Com Interpolação (Suave)</option>
+      <option value="puro">Sem Interpolação (Dados Brutos)</option>
+    </select>
+  </div>
+
+  <h3>📊 Datasets Computacionais</h3>
+  <div id="lista" style="flex: 1; overflow-y: auto;"></div>
 </div>
 
-<div class="container">
-  <div id="drop">Arraste um JSON aqui</div>
-  <div id="info"></div>
+<div class="main">
+  <div class="topbar">
+    <span id="titulo-arquivo">Selecione um arquivo de desempenho...</span>
+    <button class="btn-export" onclick="exportar()">🖼️ Exportar PNG</button>
+  </div>
+
+  <div id="info">Clique em um dataset para visualizar o comportamento computacional.</div>
   <div id="grafico"></div>
+  <div id="tabela"></div>
 </div>
 
 <script>
 const token = "123";
-const arquivo_json = "{{ arquivo_json or '' }}";
+let rendererGlobal, cenaGlobal, cameraGlobal, jsonAtual = null;
 
-// ---------------- DRAG DROP ----------------
-const drop = document.getElementById("drop");
+// Carregar lista de arquivos
+fetch(`/lista_json?token=${token}`)
+  .then(res=>res.json())
+  .then(lista=>{
+    const div = document.getElementById("lista");
+    lista.forEach(nome=>{
+      const el = document.createElement("div");
+      el.className = "json-item";
+      el.innerText = nome.replace(/_/g, " ").toUpperCase();
+      el.onclick = () => { jsonAtual = nome; carregarDados(nome); };
+      div.appendChild(el);
+    });
+  });
 
-drop.addEventListener("dragover", e => e.preventDefault());
-
-drop.addEventListener("drop", e => {
-  e.preventDefault();
-
-  const file = e.dataTransfer.files[0];
-  const reader = new FileReader();
-
-  reader.onload = e => {
-    const json = JSON.parse(e.target.result);
-    enviar(json);
-  };
-
-  reader.readAsText(file);
-});
-
-// ---------------- AUTO LOAD ----------------
-if (arquivo_json) {
-  fetch(arquivo_json)
-    .then(res => res.json())
-    .then(data => desenhar(data));
+function recarregarAtual() {
+    if (jsonAtual) carregarDados(jsonAtual);
 }
 
-// ---------------- BACKEND ----------------
-function enviar(json) {
-  fetch(`/data_temp?token=${token}`, {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify(json)
-  })
-  .then(res => res.json())
-  .then(data => desenhar(data));
+function carregarDados(nome) {
+  const modo = document.getElementById("modoAjuste").value;
+  const url = modo === "puro" 
+    ? `/api/ajuste-puro/${nome}?token=${token}` 
+    : `/data/${nome}.json?token=${token}`;
+
+  document.getElementById("titulo-arquivo").innerText = `Dataset: ${nome.toUpperCase()} | Modo: ${modo === 'padrao' ? 'Suavizado' : 'Bruto'}`;
+
+  fetch(url)
+    .then(res=>res.json())
+    .then(data => desenhar(data, modo));
 }
 
-// ---------------- DESENHO ----------------
-function desenhar(data) {
-
-  document.getElementById("grafico").innerHTML = "";
+function desenhar(data, modo){
+  const container = document.getElementById("grafico");
+  container.innerHTML = "";
 
   const scene = new THREE.Scene();
+  const width = container.clientWidth;
+  const height = container.clientHeight;
 
-  const camera = new THREE.PerspectiveCamera(
-    75, window.innerWidth/window.innerHeight, 0.1, 1000
-  );
+  const camera = new THREE.PerspectiveCamera(75, width/height, 0.1, 100000);
+  const renderer = new THREE.WebGLRenderer({preserveDrawingBuffer:true, antialias: true});
+  renderer.setSize(width, height);
+  container.appendChild(renderer.domElement);
 
-  const renderer = new THREE.WebGLRenderer({antialias:true});
-  renderer.setSize(window.innerWidth, window.innerHeight * 0.8);
-  document.getElementById("grafico").appendChild(renderer.domElement);
+  rendererGlobal = renderer;
+  cenaGlobal = scene;
+  cameraGlobal = camera;
 
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
-  controls.enableRotate = false;
+  
+  const x = data.x || data.pontos.x;
+  const y = data.y || data.pontos.y;
+  const {a, b, c} = data.coeficientes;
+  const r2 = data.r2 || calcularR2Manual(x, y, a, b, c);
 
-  const x = data.x;
-  const y = data.y;
-
+  // --- CÁLCULO DE CENTRALIZAÇÃO DA CÂMERA ---
   const x_min = Math.min(...x);
   const x_max = Math.max(...x);
+  const y_min = Math.min(...y);
+  const y_max = Math.max(...y);
+  
+  const centerX = (x_max + x_min) / 2;
+  const centerY = (y_max + y_min) / 2;
+  const scaleZoom = Math.max(x_max - x_min, y_max - y_min);
 
-  camera.position.z = (x_max - x_min) * 2;
+  // Posiciona a câmera olhando para o centro dos dados
+  camera.position.set(centerX, centerY, scaleZoom * 1.2 || 10);
+  controls.target.set(centerX, centerY, 0);
 
-  // -------- EQUAÇÃO --------
-  const a = data.coeficientes.a;
-  const b = data.coeficientes.b;
-  const c = data.coeficientes.c;
-
-  document.getElementById("info").innerHTML =
-    `<b>Equação:</b> y = ${a.toFixed(2)}x² + ${b.toFixed(2)}x + ${c.toFixed(2)}`;
-
-  // -------- PONTOS --------
-  x.forEach((xi,i)=>{
+  // --- DESENHAR PONTOS (Esferas) ---
+  const raioEsfera = scaleZoom * 0.01 || 0.5; // Tamanho dinâmico para não sumir
+  const orderPoints = x.map((xi, i) => ({x: xi, y: y[i]})).sort((p1, p2) => p1.x - p2.x);
+  
+  orderPoints.forEach(pt => {
     const p = new THREE.Mesh(
-      new THREE.SphereGeometry(0.3),
-      new THREE.MeshBasicMaterial({color:0xff0000})
+      new THREE.SphereGeometry(raioEsfera),
+      new THREE.MeshBasicMaterial({color: 0xff4444})
     );
-    p.position.set(xi,y[i],0);
+    p.position.set(pt.x, pt.y, 0);
     scene.add(p);
   });
 
-  // -------- CURVA --------
-  const pontos = [];
-
-  for(let i=0;i<200;i++){
-    let xi = x_min + (i/200)*(x_max-x_min);
-    let yi = a*xi*xi + b*xi + c;
-    pontos.push(new THREE.Vector3(xi,yi,0));
+  // --- LÓGICA DE INTERPOLAÇÃO ---
+  // Função que gera os 200 pontos da parábola suavizada
+  function gerarCurvaSuave() {
+      let pontos = [];
+      for(let i=0; i<=200; i++){
+          let xi = x_min + (i/200) * (x_max - x_min);
+          let yi = a*xi*xi + b*xi + c;
+          pontos.push(new THREE.Vector3(xi, yi, 0));
+      }
+      return pontos;
   }
 
-  const linha = new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints(pontos),
-    new THREE.LineBasicMaterial({color:0x00ff00})
-  );
+  if (modo === "padrao") {
+      // 1. COM INTERPOLAÇÃO: Desenha apenas a curva suave do ajuste matemático
+      const curvaPoints = gerarCurvaSuave();
+      const linhaCurva = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(curvaPoints),
+          new THREE.LineBasicMaterial({color: 0x38bdf8, linewidth: 2})
+      );
+      scene.add(linhaCurva);
 
-  scene.add(linha);
+  } else {
+      // 2. SEM INTERPOLAÇÃO: Liga os dados brutos com retas diretas
+      let rawPoints = orderPoints.map(pt => new THREE.Vector3(pt.x, pt.y, 0));
+      const linhaBruta = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(rawPoints),
+          new THREE.LineBasicMaterial({color: 0xff4444, linewidth: 2}) // Mesma cor dos pontos
+      );
+      scene.add(linhaBruta);
 
-  // -------- ANIMAÇÃO --------
-  const bola = new THREE.Mesh(
-    new THREE.SphereGeometry(0.4),
-    new THREE.MeshBasicMaterial({color:0xffff00})
-  );
+      // Desenha o modelo quadrático como referência (tracejado)
+      const curvaPoints = gerarCurvaSuave();
+      const refMaterial = new THREE.LineDashedMaterial({ 
+          color: 0x38bdf8, 
+          dashSize: scaleZoom/50, 
+          gapSize: scaleZoom/50 
+      });
+      const refGeom = new THREE.BufferGeometry().setFromPoints(curvaPoints);
+      const refLine = new THREE.Line(refGeom, refMaterial);
+      refLine.computeLineDistances(); // Obrigatório para linhas tracejadas no Three.js
+      scene.add(refLine);
+  }
 
-  scene.add(bola);
+  // --- ATUALIZAR INFO ---
+  let analise = a > 0 ? "O custo computacional acelera (crescimento de 2º grau)." : "O sistema atinge um pico/platô (inversão da parábola).";
 
-  let t = x_min;
+  document.getElementById("info").innerHTML = `
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <div><b>Regressão:</b> <span style="color:#38bdf8">y = ${a.toExponential(2)}x² + ${b.toExponential(2)}x + ${c.toFixed(2)}</span></div>
+        <div><b>Coeficiente R²:</b> <span style="color:#10b981">${(r2 * 100).toFixed(2)}%</span></div>
+    </div>
+    <div style="margin-top: 5px;"><b>Comportamento:</b> ${analise}</div>
+  `;
+
+  // --- GERAR TABELA ---
+  let htmlTabela = "<table><tr><th>Entrada (X)</th><th>Valor Real (Y)</th><th>Valor Ajustado</th><th>Resíduo</th></tr>";
+  orderPoints.forEach(pt =>{
+    let prev = a*pt.x*pt.x + b*pt.x + c;
+    let erro = pt.y - prev;
+    htmlTabela += `<tr><td>${pt.x}</td><td>${pt.y.toFixed(2)}</td><td>${prev.toFixed(2)}</td><td style="color:${erro<0?'#f87171':'#10b981'}">${erro.toFixed(4)}</td></tr>`;
+  });
+  document.getElementById("tabela").innerHTML = htmlTabela + "</table>";
 
   function animate(){
     requestAnimationFrame(animate);
-
-    t += (x_max-x_min)/200;
-    if(t > x_max) t = x_min;
-
-    let yv = a*t*t + b*t + c;
-    bola.position.set(t,yv,0);
-
     controls.update();
-    renderer.render(scene,camera);
+    renderer.render(scene, camera);
   }
-
   animate();
 }
-</script>
 
+function calcularR2Manual(x, y, a, b, c) {
+    let yMed = y.reduce((acc,val)=>acc+val)/y.length;
+    let ssTot = y.reduce((s,v)=>s+(v-yMed)**2,0);
+    let ssRes = x.reduce((s,xi,i)=>{
+        let yi = a*xi*xi + b*xi + c;
+        return s + (y[i]-yi)**2;
+    },0);
+    return ssTot === 0 ? 1 : 1 - (ssRes/ssTot);
+}
+
+function exportar(){
+  if(!rendererGlobal) return;
+  const link = document.createElement("a");
+  link.download = "analise_computacional.png";
+  link.href = rendererGlobal.domElement.toDataURL();
+  link.click();
+}
+
+window.addEventListener('resize', () => {
+    if(cameraGlobal && rendererGlobal) {
+        const container = document.getElementById("grafico");
+        cameraGlobal.aspect = container.clientWidth / container.clientHeight;
+        cameraGlobal.updateProjectionMatrix();
+        rendererGlobal.setSize(container.clientWidth, container.clientHeight);
+    }
+});
+</script>
 </body>
 </html>
