@@ -16,7 +16,7 @@ def index():
 def plot(nome_json):
     return render_template(
         "index.html",
-        arquivo_json=f"/data/{nome_json}.json?token={TOKEN}"
+        arquivo_json=f("/data/{nome_json}.json?token={TOKEN}")
     )
 
 @app.route("/lista_json")
