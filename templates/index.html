@@ -21,7 +21,8 @@ body { margin:0; font-family:Arial; background:#0f172a; color:white; display:fle
 table { width:100%; border-collapse:collapse; font-size: 13px; }
 th, td { border:1px solid #334155; padding:8px; text-align:center; }
 th { background: #1e293b; }
-.btn-export { background: #0ea5e9; border: none; color: white; padding: 8px 15px; border-radius: 4px; cursor: pointer; }
+.btn-export { background: #0ea5e9; border: none; color: white; padding: 8px 15px; border-radius: 4px; cursor: pointer; margin-left: 5px; }
+.btn-csv { background: #10b981; } /* Verde para o CSV */
 </style>
 </head>
 
@@ -45,7 +46,10 @@ th { background: #1e293b; }
 <div class="main">
   <div class="topbar">
     <span id="titulo-arquivo">Selecione um arquivo de desempenho...</span>
-    <button class="btn-export" onclick="exportar()">🖼️ Exportar PNG</button>
+    <div class="actions">
+        <button class="btn-export" onclick="exportar()">🖼️ PNG</button>
+        <button class="btn-export btn-csv" onclick="exportarCSV()">📊 CSV</button>
+    </div>
   </div>
 
   <div id="info">Clique em um dataset para visualizar o comportamento computacional.</div>
@@ -107,27 +111,27 @@ function desenhar(data, modo){
 
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
   
-  const x = data.x || data.pontos.x;
-  const y = data.y || data.pontos.y;
+  const x = data.x;
+  const y = data.y;
   const {a, b, c} = data.coeficientes;
+  
+  // AJUSTE 1: Prioriza a equação formatada vinda do Python
+  const equacaoParaExibir = data.equacao || `y = ${a.toExponential(2)}x² + ${b.toExponential(2)}x + ${c.toFixed(2)}`;
+  
   const r2 = data.r2 || calcularR2Manual(x, y, a, b, c);
 
-  // --- CÁLCULO DE CENTRALIZAÇÃO DA CÂMERA ---
   const x_min = Math.min(...x);
   const x_max = Math.max(...x);
   const y_min = Math.min(...y);
   const y_max = Math.max(...y);
-  
   const centerX = (x_max + x_min) / 2;
   const centerY = (y_max + y_min) / 2;
   const scaleZoom = Math.max(x_max - x_min, y_max - y_min);
 
-  // Posiciona a câmera olhando para o centro dos dados
   camera.position.set(centerX, centerY, scaleZoom * 1.2 || 10);
   controls.target.set(centerX, centerY, 0);
 
-  // --- DESENHAR PONTOS (Esferas) ---
-  const raioEsfera = scaleZoom * 0.01 || 0.5; // Tamanho dinâmico para não sumir
+  const raioEsfera = scaleZoom * 0.01 || 0.5;
   const orderPoints = x.map((xi, i) => ({x: xi, y: y[i]})).sort((p1, p2) => p1.x - p2.x);
   
   orderPoints.forEach(pt => {
@@ -139,8 +143,6 @@ function desenhar(data, modo){
     scene.add(p);
   });
 
-  // --- LÓGICA DE INTERPOLAÇÃO ---
-  // Função que gera os 200 pontos da parábola suavizada
   function gerarCurvaSuave() {
       let pontos = [];
       for(let i=0; i<=200; i++){
@@ -152,24 +154,20 @@ function desenhar(data, modo){
   }
 
   if (modo === "padrao") {
-      // 1. COM INTERPOLAÇÃO: Desenha apenas a curva suave do ajuste matemático
       const curvaPoints = gerarCurvaSuave();
       const linhaCurva = new THREE.Line(
           new THREE.BufferGeometry().setFromPoints(curvaPoints),
           new THREE.LineBasicMaterial({color: 0x38bdf8, linewidth: 2})
       );
       scene.add(linhaCurva);
-
   } else {
-      // 2. SEM INTERPOLAÇÃO: Liga os dados brutos com retas diretas
       let rawPoints = orderPoints.map(pt => new THREE.Vector3(pt.x, pt.y, 0));
       const linhaBruta = new THREE.Line(
           new THREE.BufferGeometry().setFromPoints(rawPoints),
-          new THREE.LineBasicMaterial({color: 0xff4444, linewidth: 2}) // Mesma cor dos pontos
+          new THREE.LineBasicMaterial({color: 0xff4444, linewidth: 2})
       );
       scene.add(linhaBruta);
 
-      // Desenha o modelo quadrático como referência (tracejado)
       const curvaPoints = gerarCurvaSuave();
       const refMaterial = new THREE.LineDashedMaterial({ 
           color: 0x38bdf8, 
@@ -178,23 +176,22 @@ function desenhar(data, modo){
       });
       const refGeom = new THREE.BufferGeometry().setFromPoints(curvaPoints);
       const refLine = new THREE.Line(refGeom, refMaterial);
-      refLine.computeLineDistances(); // Obrigatório para linhas tracejadas no Three.js
+      refLine.computeLineDistances();
       scene.add(refLine);
   }
 
-  // --- ATUALIZAR INFO ---
   let analise = a > 0 ? "O custo computacional acelera (crescimento de 2º grau)." : "O sistema atinge um pico/platô (inversão da parábola).";
 
+  // AJUSTE 1 APLICADO AQUI NO INNERHTML
   document.getElementById("info").innerHTML = `
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-        <div><b>Regressão:</b> <span style="color:#38bdf8">y = ${a.toExponential(2)}x² + ${b.toExponential(2)}x + ${c.toFixed(2)}</span></div>
+        <div><b>Regressão:</b> <span style="color:#38bdf8">${equacaoParaExibir}</span></div>
         <div><b>Coeficiente R²:</b> <span style="color:#10b981">${(r2 * 100).toFixed(2)}%</span></div>
     </div>
     <div style="margin-top: 5px;"><b>Comportamento:</b> ${analise}</div>
   `;
 
-  // --- GERAR TABELA ---
-  let htmlTabela = "<table><tr><th>Entrada (X)</th><th>Valor Real (Y)</th><th>Valor Ajustado</th><th>Resíduo</th></tr>";
+  let htmlTabela = "<table id='tabela-dados'><tr><th>Entrada (X)</th><th>Valor Real (Y)</th><th>Valor Ajustado</th><th>Resíduo</th></tr>";
   orderPoints.forEach(pt =>{
     let prev = a*pt.x*pt.x + b*pt.x + c;
     let erro = pt.y - prev;
@@ -226,6 +223,27 @@ function exportar(){
   link.download = "analise_computacional.png";
   link.href = rendererGlobal.domElement.toDataURL();
   link.click();
+}
+
+// AJUSTE 6: Função de exportação para CSV
+function exportarCSV() {
+    let csv = [];
+    const rows = document.querySelectorAll("#tabela-dados tr");
+    
+    for (const row of rows) {
+        const cells = row.querySelectorAll("th, td");
+        const rowData = Array.from(cells).map(cell => `"${cell.innerText.replace('.', ',')}"`);
+        csv.push(rowData.join(";")); // Usando ponto-e-vírgula para facilitar abertura no Excel BR
+    }
+
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + csv.join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `exportacao_${jsonAtual || 'dados'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
 
 window.addEventListener('resize', () => {
